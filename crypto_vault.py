@@ -1,12 +1,5 @@
 """
-Military-Grade AES-256-GCM Encryption Module for Biometric Fingerprints
------------------------------------------------------------------------
-Provides:
-1. Cryptographically secure random PIN generation (using secrets module)
-2. PBKDF2-HMAC-SHA256 key derivation with 600,000 iterations (OWASP standard)
-3. Authenticated AES-256-GCM encryption with 128-bit integrity tag
-4. Binary vault export (.vault)
-5. Universal standalone zero-install HTML viewer (.html) decryptable anywhere
+AES-256-GCM Encryption Module for Biometric Fingerprints
 """
 
 import os
@@ -23,35 +16,30 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 MAGIC_HEADER = b"FPVAULT1"
 
 def generate_secure_pin():
-    """Generates an 8-digit high-entropy PIN formatted as XXXX-XXXX."""
+    """Generates an 8-digit PIN formatted as XXXX-XXXX."""
     p1 = secrets.randbelow(10000)
     p2 = secrets.randbelow(10000)
     return f"{p1:04d}-{p2:04d}"
 
 def encrypt_image_data(image_array, pin=None):
     """
-    Encrypts an image array with AES-256-GCM.
-    Returns: (pin, vault_bytes, salt, nonce, ciphertext_b64)
+    Encrypts an image array using AES-256-GCM with PBKDF2 key derivation.
     """
     if pin is None:
         pin = generate_secure_pin()
 
-    # Normalize PIN: keep alphanumeric characters only
     clean_pin = re.sub(r'[^0-9a-zA-Z]', '', str(pin).strip())
     if not clean_pin:
         raise ValueError("PIN cannot be empty.")
 
-    # Encode image into lossless PNG byte stream
     success, png_buffer = cv2.imencode(".png", image_array)
     if not success:
         raise ValueError("Failed to encode image to PNG format.")
     png_bytes = png_buffer.tobytes()
 
-    # Cryptographic parameters
     salt = secrets.token_bytes(16)
     nonce = secrets.token_bytes(12)
 
-    # Derive 256-bit key via PBKDF2 (600,000 iterations)
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -60,11 +48,9 @@ def encrypt_image_data(image_array, pin=None):
     )
     derived_key = kdf.derive(clean_pin.encode("utf-8"))
 
-    # AES-256-GCM Authenticated Encryption
     aesgcm = AESGCM(derived_key)
     ciphertext = aesgcm.encrypt(nonce, png_bytes, None)
 
-    # Binary vault package
     vault_bytes = MAGIC_HEADER + salt + nonce + ciphertext
     ciphertext_b64 = base64.b64encode(ciphertext).decode("utf-8")
 
@@ -472,10 +458,7 @@ def create_standalone_html_vault(out_html_path, title_name, salt_hex, nonce_hex,
 
 def secure_export_vault(image_array, base_output_path, title_name=None, custom_pin=None):
     """
-    Encrypts the image and exports:
-    1. Binary container (.vault)
-    2. Standalone zero-install web viewer (.html)
-    Returns: (pin, vault_file_path, html_file_path)
+    Encrypts image and exports .vault, .html, and _PIN.txt files.
     """
     pin, vault_bytes, salt_hex, nonce_hex, ciphertext_b64 = encrypt_image_data(image_array, custom_pin)
     
@@ -485,14 +468,11 @@ def secure_export_vault(image_array, base_output_path, title_name=None, custom_p
     if title_name is None:
         title_name = os.path.basename(base_output_path)
 
-    # 1. Save binary vault
     with open(vault_file_path, "wb") as f:
         f.write(vault_bytes)
 
-    # 2. Save standalone HTML vault
     create_standalone_html_vault(html_file_path, title_name, salt_hex, nonce_hex, ciphertext_b64)
 
-    # 3. Save convenient PIN text file in the same directory
     pin_file_path = f"{base_output_path}_PIN.txt"
     clean_numeric_pin = re.sub(r'[^0-9a-zA-Z]', '', str(pin))
     pin_content = f"""======================================================================

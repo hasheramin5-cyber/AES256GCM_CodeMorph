@@ -46,12 +46,10 @@ def decrypt_vault_file(vault_path, pin_string):
     offset += 12
     ciphertext = data[offset:]
 
-    # Clean PIN: normalize to alphanumeric characters only
     clean_pin = re.sub(r'[^0-9a-zA-Z]', '', str(pin_string).strip())
     if not clean_pin:
         raise ValueError("PIN cannot be empty.")
 
-    # Derive AES-256 key using PBKDF2-HMAC-SHA256 with 600,000 iterations
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -66,7 +64,6 @@ def decrypt_vault_file(vault_path, pin_string):
     except Exception:
         raise ValueError("Decryption failed! Incorrect PIN or file has been tampered with.")
 
-    # Decode PNG bytes to OpenCV image
     img_array = np.frombuffer(decrypted_png_bytes, dtype=np.uint8)
     image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     if image is None:
@@ -83,7 +80,6 @@ def main():
     if len(sys.argv) > 1:
         vault_path = sys.argv[1].strip().strip('"').strip("'")
     else:
-        # Prompt file picker
         try:
             root = tk.Tk()
             root.withdraw()
@@ -107,7 +103,6 @@ def main():
 
     print(f"[INFO] Target Vault: {vault_path}")
 
-    # Prompt for PIN in GUI or Terminal
     pin = ""
     try:
         root = tk.Tk()
@@ -151,7 +146,6 @@ def main():
             pass
         sys.exit(1)
 
-    # Save prompt option
     base_name = os.path.splitext(vault_path)[0]
     out_extracted_path = f"{base_name}_decrypted.png"
 
@@ -161,7 +155,6 @@ def main():
 
     window_name = f"UNLOCKED VAULT: {os.path.basename(vault_path)}"
     
-    # Scale image nicely for display if necessary
     disp_h = 600
     disp_w = int(decrypted_img.shape[1] * (disp_h / decrypted_img.shape[0]))
     disp_img = cv2.resize(decrypted_img, (disp_w, disp_h), interpolation=cv2.INTER_AREA).copy()
