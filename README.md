@@ -70,11 +70,11 @@ Secured using **AES-256-GCM** authenticated encryption (128-bit integrity tag) c
 **Hasher Amin**
 
 <a href="https://LinkedIn.com/in/hasheramin">
-  <img src="assets/Logo Used/LinkedIn.png" alt="LinkedIn Logo" width="40">
+  <img src="Assets/Logo Used/LinkedIn.png" alt="LinkedIn Logo" width="40">
 </a>
 <a href="https://github.com/hasheramin5-cyber">
-  <img src="assets/Logo Used/GitHub Black.png" alt="GitHub Logo" width="40">
+  <img src="Assets/Logo Used/GitHub Black.png" alt="GitHub Logo" width="40">
 </a>
 <a href="https://X.com/hasheramin_code">
-  <img src="assets/Logo Used/Twitter.png" alt="X(Twitter) Logo" width="40">
+  <img src="Assets/Logo Used/Twitter.png" alt="X(Twitter) Logo" width="40">
 </a>
