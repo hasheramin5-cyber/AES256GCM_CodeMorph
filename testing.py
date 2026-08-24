@@ -103,16 +103,8 @@ def enhance_and_segment_fingerprint(
     auto_invert=True
 ):
     """
-    Processes the input image to extract sharp, accurate black ridges on pure white background.
-    
-    Steps:
-    1. Grayscale conversion and illumination normalization (flattens shadows/gradients).
-    2. CLAHE contrast enhancement and Bilateral edge-preserving filtering.
-    3. ROI (Region of Interest) segmentation using local variance to isolate the fingerprint.
-    4. Adaptive Gaussian thresholding to binarize ridges (0=black, 255=white).
-    5. Morphological cleaning to eliminate noise specks and seal small breaks.
+    Processes the input image to extract sharp ridges on pure white background.
     """
-    # 1. Grayscale conversion
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
@@ -121,8 +113,6 @@ def enhance_and_segment_fingerprint(
     h_img, w_img = gray.shape[:2]
     bw = max(1, min(10, h_img // 4, w_img // 4))
 
-    # 2. Check if original image has light ridges on dark background
-    # (e.g. some optical sensors). If average border is darker than center, invert.
     border_mean = (np.mean(gray[:bw, :]) + np.mean(gray[-bw:, :]) + 
                    np.mean(gray[:, :bw]) + np.mean(gray[:, -bw:])) / 4.0
     center_mean = np.mean(gray[h_img//4: 3*h_img//4, w_img//4: 3*w_img//4])
@@ -130,19 +120,15 @@ def enhance_and_segment_fingerprint(
     if auto_invert and border_mean < center_mean and border_mean < 80:
         gray = cv2.bitwise_not(gray)
 
-    # 3. Flatten illumination variations (removes uneven flash / paper lighting)
     kernel_bg = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (35, 35))
     bg_estimate = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel_bg)
     flat_gray = cv2.divide(gray, bg_estimate, scale=255)
 
-    # 4. Enhance contrast using CLAHE
     clahe = cv2.createCLAHE(clipLimit=3.5, tileGridSize=(8, 8))
     enhanced = clahe.apply(flat_gray)
 
-    # 5. Denoise while preserving sharp ridge boundaries
     smoothed = cv2.bilateralFilter(enhanced, 7, 50, 50)
 
-    # 6. ROI Segmentation via Local Texture Variance
     blur = cv2.blur(smoothed.astype(np.float32), (15, 15))
     sq_blur = cv2.blur((smoothed.astype(np.float32)) ** 2, (15, 15))
     var = np.maximum(sq_blur - blur ** 2, 0)
@@ -155,7 +141,6 @@ def enhance_and_segment_fingerprint(
     mask_clean = cv2.morphologyEx(var_mask, cv2.MORPH_CLOSE, morph_kernel)
     mask_clean = cv2.morphologyEx(mask_clean, cv2.MORPH_OPEN, morph_kernel)
 
-    # Find the main fingerprint contour & convex hull
     contours, _ = cv2.findContours(mask_clean, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     roi_mask = np.zeros_like(gray)
     
@@ -172,20 +157,15 @@ def enhance_and_segment_fingerprint(
         roi_mask[:] = 255
         bbox = (0, 0, gray.shape[1], gray.shape[0])
 
-    # 7. Adaptive binarization (Ridges = 0 Black, Valleys = 255 White)
     bs = adaptive_block_size if adaptive_block_size % 2 == 1 else adaptive_block_size + 1
     binary = cv2.adaptiveThreshold(
         smoothed, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY, bs, adaptive_c
     )
 
-    # 8. Clean isolated noise specks
     binary_clean = cv2.medianBlur(binary, 3)
-
-    # 9. Force all non-fingerprint / background area to pure white (255)
     binary_clean[roi_mask == 0] = 255
 
-    # Also clean enhanced grayscale image background outside ROI
     enhanced_clean = enhanced.copy()
     enhanced_clean[roi_mask == 0] = 255
 
@@ -194,23 +174,19 @@ def enhance_and_segment_fingerprint(
 def make_clean_square_box(image_input, bbox, padding_ratio=0.12, target_size=None):
     """
     Crops the detected fingerprint and places it centered inside a clean square box.
-    Everything outside the fingerprint is guaranteed pure white (255).
     """
     x, y, w, h = bbox
     cx, cy = x + w // 2, y + h // 2
     
-    # Calculate square side length with padding
     max_dim = max(w, h)
     side = max(1, int(max_dim * (1.0 + padding_ratio)))
     half_side = side // 2
 
-    # Canvas of pure white pixels (255)
     if len(image_input.shape) == 3:
         square_box = np.full((side, side, image_input.shape[2]), 255, dtype=np.uint8)
     else:
         square_box = np.full((side, side), 255, dtype=np.uint8)
 
-    # Compute source and destination bounding coordinates
     src_x1 = cx - half_side
     src_y1 = cy - half_side
     src_x2 = src_x1 + side
@@ -232,7 +208,6 @@ def make_clean_square_box(image_input, bbox, padding_ratio=0.12, target_size=Non
     if crop_w > 0 and crop_h > 0:
         square_box[pad_y1:pad_y2, pad_x1:pad_x2] = image_input[img_y1:img_y2, img_x1:img_x2]
 
-    # Optional resize to standard square resolution (e.g. 512x512, 1024x1024)
     if target_size is not None:
         square_box = cv2.resize(square_box, (target_size, target_size), interpolation=cv2.INTER_AREA)
 
@@ -240,19 +215,13 @@ def make_clean_square_box(image_input, bbox, padding_ratio=0.12, target_size=Non
 
 def process_and_save(image_path=None, target_size=None):
     """
-    Main processing pipeline:
-    - Loads image
-    - Generates (a): Clean Square Binary (Crisp Black Ridges on Pure White)
-    - Generates (b): Clean Square Enhanced Grayscale (CLAHE Enhanced)
-    - Saves both in the exact same folder with (a) and (b) suffixes.
+    Main processing pipeline: loads image, enhances, crops square box, and encrypts output.
     """
     raw_img, filename = load_input_image(image_path)
     
-    # Determine exact folder, base name, and output file paths
     file_dir = os.path.dirname(os.path.abspath(filename))
     base_name, ext = os.path.splitext(os.path.basename(filename))
     
-    # Retain lossless format (PNG preferred for sharp black/white ridge contrast)
     out_ext = ext if ext.lower() in [".png", ".bmp", ".tif", ".tiff"] else ".png"
     out_filename_a = os.path.join(file_dir, f"{base_name}(a){out_ext}")
     out_filename_b = os.path.join(file_dir, f"{base_name}(b){out_ext}")
@@ -262,16 +231,10 @@ def process_and_save(image_path=None, target_size=None):
     print("="*65)
     print(f" Source Image : {filename}")
     
-    # Process fingerprint
     binary_full, enhanced_clean, bbox = enhance_and_segment_fingerprint(raw_img)
-    
-    # 1. Square Box (a): Binary Clean (Black Ridges, White Background)
     square_binary = make_clean_square_box(binary_full, bbox, padding_ratio=0.12, target_size=target_size)
-    
-    # 2. Square Box (b): Enhanced Grayscale (CLAHE Enhanced Fingerprint)
     square_enhanced = make_clean_square_box(enhanced_clean, bbox, padding_ratio=0.12, target_size=target_size)
     
-    # Save both outputs in the same directory as input image
     cv2.imwrite(out_filename_a, square_binary)
     cv2.imwrite(out_filename_b, square_enhanced)
     
@@ -282,7 +245,6 @@ def process_and_save(image_path=None, target_size=None):
     print(f" Output Dimensions : {square_binary.shape[1]}x{square_binary.shape[0]} px")
     print("="*65)
     
-    # 3. Secure AES-256 Encryption for Image (b)
     from crypto_vault import secure_export_vault
     base_vault_path = os.path.join(file_dir, f"{base_name}(b)")
     pin, vault_path, html_path, pin_path = secure_export_vault(
@@ -292,7 +254,7 @@ def process_and_save(image_path=None, target_size=None):
     )
 
     print("\n" + "="*70)
-    print(" [SECURITY] MILITARY-GRADE BIOMETRIC ENCRYPTION (AES-256-GCM) ")
+    print(" [SECURITY] AES-256-GCM ENCRYPTED BIOMETRIC VAULT ")
     print("="*70)
     print(f" Target Image   : {os.path.basename(out_filename_b)}")
     print(f" Encrypted Vault: {vault_path}")
@@ -302,11 +264,10 @@ def process_and_save(image_path=None, target_size=None):
     print(f" [KEY] SECRET ACCESS PIN :  >>>  {pin}  <<<")
     print("-"*70)
     print(" Security Level: AES-256-GCM + 600,000 PBKDF2 Iterations")
-    print(" Estimated Time to Crack on Supercomputers: Billions of Years")
     print("\n [HOW TO SHARE & OPEN]:")
     print(" 1. Send the file to your recipient:")
-    print(f"    - Universal Zero-Install HTML: {os.path.basename(html_path)} (Opens in ANY browser)")
-    print(f"    - Or Binary Vault:             {os.path.basename(vault_path)} (Open via 'python unlock.py')")
+    print(f"    - Web HTML Vault:  {os.path.basename(html_path)} (Opens in ANY browser)")
+    print(f"    - Or Binary Vault: {os.path.basename(vault_path)} (Open via 'python unlock.py')")
     print(f" 2. Send the PIN [{pin}] separately (via SMS, WhatsApp, Signal, etc.)")
     print("="*70 + "\n")
     
@@ -330,8 +291,6 @@ def main():
     print(" - Press [S] while focused on the image window to re-save.")
     print("-"*65 + "\n")
 
-    # Prepare visual comparison stack
-    # Resize images to match square box height for neat side-by-side display
     disp_h = 512
     disp_w = int(raw_img.shape[1] * (disp_h / raw_img.shape[0]))
     
@@ -343,7 +302,6 @@ def main():
     sq_disp = cv2.resize(square_binary, (disp_h, disp_h))
     sq_disp = cv2.cvtColor(sq_disp, cv2.COLOR_GRAY2BGR)
 
-    # Add descriptive titles to each preview panel
     cv2.putText(orig_disp, "1. Original Input", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
     cv2.putText(enh_disp, "2. (b) Enhanced Square", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
     cv2.putText(sq_disp, "3. (a) Clean Binary Square", (15, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
@@ -353,16 +311,14 @@ def main():
 
     cv2.imshow(window_name, comparison_stack)
 
-    # Event loop listening for keypresses and window close [X]
     while True:
         key = cv2.waitKey(100) & 0xFF
         
-        # Check if the user closed the window by clicking [X]
         if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
             print("[INFO] Preview window closed.")
             break
             
-        if key in [ord('q'), ord('Q'), 27]: # Q or ESC
+        if key in [ord('q'), ord('Q'), 27]:
             print("[INFO] Exiting application.")
             break
         elif key in [ord('s'), ord('S')]:
