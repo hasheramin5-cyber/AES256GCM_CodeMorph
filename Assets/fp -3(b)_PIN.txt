@@ -1,0 +1,10 @@
+======================================================================
+ ENCRYPTED BIOMETRIC FILE ACCESS KEY
+======================================================================
+ Target Vault File : fp -3(b).vault
+ Web HTML Viewer   : fp -3(b)_secure.html
+
+ [KEY] SECRET ACCESS PIN : 5435-1944
+
+ (You can type the PIN with or without dashes: 54351944)
+======================================================================
