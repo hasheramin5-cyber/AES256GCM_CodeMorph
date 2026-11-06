@@ -69,7 +69,7 @@ Secured using **AES-256-GCM** authenticated encryption (128-bit integrity tag) c
 
 **Hasher Amin**
 
-<a href="https://LinkedIn.com/in/hasheramin">
+<a href="https://LinkedIn.com/in/de-hasheramin">
   <img src="Assets/Logo Used/LinkedIn.png" alt="LinkedIn Logo" width="40">
 </a>
 <a href="https://github.com/hasheramin5-cyber">
