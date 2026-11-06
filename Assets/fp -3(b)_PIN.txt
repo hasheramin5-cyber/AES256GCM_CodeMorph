@@ -4,7 +4,7 @@
  Target Vault File : fp -3(b).vault
  Web HTML Viewer   : fp -3(b)_secure.html
 
- [KEY] SECRET ACCESS PIN : 5435-1944
+ [KEY] SECRET ACCESS PIN : 1152-1674
 
- (You can type the PIN with or without dashes: 54351944)
+ (You can type the PIN with or without dashes: 11521674)
 ======================================================================
